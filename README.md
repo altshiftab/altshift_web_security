@@ -2,7 +2,7 @@
 
 How a site is exposed to whoever visits it.
 
-The web-layer counterpart to `motmedel_domain_security`, which asks the same kind of question of a
+The web-layer counterpart to `altshift_domain_security`, which asks the same kind of question of a
 domain's mail. It shares that repository's shape: a rule id per thing that can be wrong, a curated
 severity and description behind each, and findings emitted as SARIF, so a run is something another
 tool can read rather than only a person.

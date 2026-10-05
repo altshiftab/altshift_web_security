@@ -22,6 +22,12 @@ const (
 	directiveDefaultSrc = "default-src"
 	directiveScriptSrc  = "script-src"
 	directiveStyleSrc   = "style-src"
+
+	directiveBaseUri        = "base-uri"
+	directiveChildSrc       = "child-src"
+	directiveFormAction     = "form-action"
+	directiveFrameAncestors = "frame-ancestors"
+	directiveFrameSrc       = "frame-src"
 )
 
 // noEffectSuffix is appended when a keyword is used on a directive it has no
@@ -37,6 +43,47 @@ var cdnRegisteredDomainsSet = map[string]bool{
 	"gstatic.com":    true,
 	"unpkg.com":      true,
 	"jsdelivr.net":   true,
+}
+
+// Properties naming what in the policy a result is about, so that a consumer can show the
+// directive and source beside the finding rather than recover them from the message prose.
+const (
+	// PropertyDirective is the name of the directive the result is about. A result about a missing
+	// directive names the one that is missing.
+	PropertyDirective = "directive"
+	// PropertyDirectiveValue is that directive's value as the policy states it, absent where the
+	// directive is missing or has no value.
+	PropertyDirectiveValue = "directiveValue"
+	// PropertySource is the one source of the directive that caused the result, where one did.
+	PropertySource = "source"
+)
+
+// setProperty sets a property on each result that does not already carry it, leaving one set
+// closer to the finding as it is.
+func setProperty(results []*sarif.Result, name string, value string) {
+	if value == "" {
+		return
+	}
+
+	for _, result := range results {
+		if result == nil {
+			continue
+		}
+		if result.Properties == nil {
+			result.Properties = sarif.PropertyBag{}
+		}
+		if _, ok := result.Properties[name]; !ok {
+			result.Properties[name] = value
+		}
+	}
+}
+
+// setDirective says which directive the results are about; directive is nil where it is missing.
+func setDirective(results []*sarif.Result, name string, directive contentSecurityPolicyTypes.DirectiveI) {
+	setProperty(results, PropertyDirective, name)
+	if directive != nil {
+		setProperty(results, PropertyDirectiveValue, directive.GetRawValue())
+	}
 }
 
 func getDirectiveNameUntrustedSourceLevel(directiveName string) sarif.Level {
@@ -80,11 +127,13 @@ func checkSources(directiveName string, sources []contentSecurityPolicyTypes.Sou
 		return false, nil, nil
 	}
 
-	var results []*sarif.Result
+	results := make([]*sarif.Result, 0, len(sources))
 
 	strict := true
 
 	for _, source := range sources {
+		sourceStart := len(results)
+
 		switch typedSource := source.(type) {
 		case *contentSecurityPolicyTypes.NoneSource:
 			// The CSP grammar only accepts 'none' as the entire source list, so a
@@ -269,6 +318,8 @@ func checkSources(directiveName string, sources []contentSecurityPolicyTypes.Sou
 		default:
 			return false, nil, altshiftErrors.NewWithTrace(fmt.Errorf("%w: %s", ErrUnexpectedSourceType, source))
 		}
+
+		setProperty(results[sourceStart:], PropertySource, source.String())
 	}
 
 	return strict, results, nil
@@ -380,52 +431,71 @@ func Analyze(headerValue string) ([]*sarif.Result, error) {
 			return nil, altshiftErrors.New(fmt.Errorf("check sources: %w", err), directiveName)
 		}
 
+		setDirective(results, directiveName, directive)
 		allResults = append(allResults, results...)
 	}
 
+	// The policy-wide results below are about a directive by name, one that is either missing or
+	// not strict enough; the effective ones are unique by name, the duplicates being set aside as
+	// ineffective.
+	directivesByName := make(map[string]contentSecurityPolicyTypes.DirectiveI, len(contentSecurityPolicy.Directives))
+	for _, directive := range contentSecurityPolicy.Directives {
+		if directive != nil {
+			directivesByName[directive.GetName()] = directive
+		}
+	}
+
+	policyResult := func(ruleId string, directiveName string) *sarif.Result {
+		result := httpHeadersSecurityCheckerInternal.MakeRuleIdResult(ruleId)
+		setDirective([]*sarif.Result{result}, directiveName, directivesByName[directiveName])
+		return result
+	}
+
 	if !defaultSrcDefined {
-		result := httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyMissingDefaultSrc)
+		result := policyResult(rule_id.ContentSecurityPolicyMissingDefaultSrc, directiveDefaultSrc)
 		if result.Message != nil {
 			result.Message.Text += " When no such directive is defined, the fallback is to allow any source."
 		}
 		allResults = append(allResults, result)
 	} else if !strictDefaultSource {
-		allResults = append(allResults, httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyInsecureDefaultSrc))
+		allResults = append(allResults, policyResult(rule_id.ContentSecurityPolicyInsecureDefaultSrc, directiveDefaultSrc))
 	}
 
 	if !baseUriDefined {
-		allResults = append(allResults, httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyMissingBaseUri))
+		allResults = append(allResults, policyResult(rule_id.ContentSecurityPolicyMissingBaseUri, directiveBaseUri))
 	} else if !strictBaseUri {
-		allResults = append(allResults, httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyInsecureBaseUri))
+		allResults = append(allResults, policyResult(rule_id.ContentSecurityPolicyInsecureBaseUri, directiveBaseUri))
 	}
 
 	if !formActionDefined {
-		allResults = append(allResults, httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyMissingFormAction))
+		allResults = append(allResults, policyResult(rule_id.ContentSecurityPolicyMissingFormAction, directiveFormAction))
 	} else if !strictFormAction {
-		allResults = append(allResults, httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyInsecureFormAction))
+		allResults = append(allResults, policyResult(rule_id.ContentSecurityPolicyInsecureFormAction, directiveFormAction))
 	}
 
 	if !frameAncestorsDefined {
-		allResults = append(allResults, httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyMissingFrameAncestors))
+		allResults = append(allResults, policyResult(rule_id.ContentSecurityPolicyMissingFrameAncestors, directiveFrameAncestors))
 	} else if !strictFrameAncestors {
-		allResults = append(allResults, httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyInsecureFrameAncestors))
+		allResults = append(allResults, policyResult(rule_id.ContentSecurityPolicyInsecureFrameAncestors, directiveFrameAncestors))
 	}
 
+	// Framing falls back from frame-src to child-src to default-src, and the result names whichever
+	// of them governs; where none is defined, it is frame-src that is missing.
 	if frameSrcDefined {
 		if !strictFrameSrc {
-			allResults = append(allResults, httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyInsecureFrameSrc))
+			allResults = append(allResults, policyResult(rule_id.ContentSecurityPolicyInsecureFrameSrc, directiveFrameSrc))
 		}
 	} else {
 		if childSrcDefined {
 			if !strictChildSrc {
-				allResults = append(allResults, httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyInsecureFrameSrc))
+				allResults = append(allResults, policyResult(rule_id.ContentSecurityPolicyInsecureFrameSrc, directiveChildSrc))
 			}
 		} else if defaultSrcDefined {
 			if !strictDefaultSource {
-				allResults = append(allResults, httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyInsecureFrameSrc))
+				allResults = append(allResults, policyResult(rule_id.ContentSecurityPolicyInsecureFrameSrc, directiveDefaultSrc))
 			}
 		} else {
-			allResults = append(allResults, httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyInsecureFrameSrc))
+			allResults = append(allResults, policyResult(rule_id.ContentSecurityPolicyInsecureFrameSrc, directiveFrameSrc))
 		}
 	}
 
@@ -437,6 +507,7 @@ func Analyze(headerValue string) ([]*sarif.Result, error) {
 				ineffectiveDirective.String(),
 			),
 		}
+		setDirective([]*sarif.Result{result}, ineffectiveDirective.GetName(), ineffectiveDirective)
 		allResults = append(allResults, result)
 	}
 

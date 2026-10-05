@@ -323,6 +323,24 @@ func TestWriteReport(t *testing.T) {
 			expected: []string{"value: default-src 'self';", "…"},
 		},
 		{
+			name: "a finding about one directive shows that directive rather than the policy",
+			results: []*sarif.Result{
+				makeResult(
+					"content_security_policy_unsafe_inline",
+					sarif.LevelError,
+					"Unsafe.",
+					sarif.PropertyBag{
+						"headerName":     "Content-Security-Policy",
+						"headerValue":    "default-src 'self'; script-src 'self' 'unsafe-inline'",
+						"directive":      "script-src",
+						"directiveValue": "'self' 'unsafe-inline'",
+					},
+				),
+			},
+			expected:   []string{"directive: script-src 'self' 'unsafe-inline'"},
+			unexpected: []string{"value:"},
+		},
+		{
 			name: "a property that is not text is left out rather than printed as whatever it is",
 			results: []*sarif.Result{
 				makeResult("r", sarif.LevelNote, "Reason.", sarif.PropertyBag{"headerName": 42}),

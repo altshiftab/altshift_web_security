@@ -506,3 +506,95 @@ func resultIDs(results []*sarif.Result) []string {
 	slices.Sort(ids)
 	return ids
 }
+
+// Each result names what in the policy it is about, so a consumer need not recover it from the
+// message.
+func TestAnalyze_NamesTheDirectiveAndSource(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name           string
+		input          string
+		ruleId         string
+		directive      string
+		directiveValue string
+		source         string
+	}{
+		{
+			name:           "a keyword source",
+			input:          "default-src 'self'; script-src 'self' 'unsafe-inline'; " + strictBoilerplate,
+			ruleId:         rule_id.ContentSecurityPolicyUnsafeInline,
+			directive:      "script-src",
+			directiveValue: "'self' 'unsafe-inline'",
+			source:         "'unsafe-inline'",
+		},
+		{
+			name:           "a wildcard host source",
+			input:          "default-src 'self'; img-src *; " + strictBoilerplate,
+			ruleId:         rule_id.ContentSecurityPolicyWildcardHost,
+			directive:      "img-src",
+			directiveValue: "*",
+			source:         "*",
+		},
+		{
+			name:      "a missing directive",
+			input:     "default-src 'self'",
+			ruleId:    rule_id.ContentSecurityPolicyMissingBaseUri,
+			directive: "base-uri",
+		},
+		{
+			name:           "a directive not strict enough",
+			input:          "default-src 'self'; base-uri https:; form-action 'self'; frame-ancestors 'self'",
+			ruleId:         rule_id.ContentSecurityPolicyInsecureBaseUri,
+			directive:      "base-uri",
+			directiveValue: "https:",
+		},
+		{
+			name:           "framing governed by the default",
+			input:          "default-src https:; " + strictBoilerplate,
+			ruleId:         rule_id.ContentSecurityPolicyInsecureFrameSrc,
+			directive:      "default-src",
+			directiveValue: "https:",
+		},
+		{
+			name:           "an ineffective directive",
+			input:          "default-src 'self'; default-src 'unsafe-inline'; " + strictBoilerplate,
+			ruleId:         rule_id.ContentSecurityPolicyIneffectiveDirective,
+			directive:      "default-src",
+			directiveValue: "'unsafe-inline'",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			results, err := Analyze(testCase.input)
+			if err != nil {
+				t.Fatalf("Analyze(%q) err = %v", testCase.input, err)
+			}
+
+			for _, result := range results {
+				if result.RuleId != testCase.ruleId {
+					continue
+				}
+
+				expected := map[string]string{
+					PropertyDirective:      testCase.directive,
+					PropertyDirectiveValue: testCase.directiveValue,
+					PropertySource:         testCase.source,
+				}
+				for name, want := range expected {
+					got, _ := result.Properties[name].(string)
+					if got != want {
+						t.Errorf("%s: %s = %q, want %q", testCase.name, name, got, want)
+					}
+				}
+
+				return
+			}
+
+			t.Fatalf("%s: no %s result in %v", testCase.name, testCase.ruleId, resultIDs(results))
+		})
+	}
+}

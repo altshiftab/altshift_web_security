@@ -156,10 +156,16 @@ func writeReport(writer io.Writer, results []*sarif.Result) error {
 		}
 
 		// The value is context for the reason above it rather than something to read in full, and a
-		// policy raising eight findings would otherwise print itself under each of them. It gets
-		// one line; --json has it whole.
-		if value := headerProperty(result, "headerValue"); value != "" {
-			line := "value: " + truncate(value, reportWidth-len(indent)-len("value: "))
+		// policy raising eight findings would otherwise print itself under each of them. Where the
+		// finding is about one directive of it, that directive is the part worth showing; either
+		// way it gets one line, and --json has it whole.
+		label, value := "value: ", headerProperty(result, "headerValue")
+		if directiveValue := headerProperty(result, "directiveValue"); directiveValue != "" {
+			label, value = "directive: ", headerProperty(result, "directive")+" "+directiveValue
+		}
+
+		if value != "" {
+			line := label + truncate(value, reportWidth-len(indent)-len(label))
 			if _, err := fmt.Fprintln(writer, indent+line); err != nil {
 				return fmt.Errorf("fprintln: %w", err)
 			}

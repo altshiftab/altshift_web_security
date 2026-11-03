@@ -25,13 +25,18 @@ const (
 	ToolInformationUri = "https://github.com/altshiftab/altshift_web_security"
 )
 
-// responseHasBody guesses whether the response carries a body based on the
+// ResponseHasBody guesses whether the response carries a body based on the
 // presence of body-indicating headers. It is intentionally conservative: a body
 // is assumed only when at least one of Content-Length (non-zero), Transfer-
 // Encoding, or Content-Type is set. A response that lacks all three (typical of
 // a bare 3xx redirect, 204 No Content, or 304 Not Modified) is treated as
 // having no body.
-func responseHasBody(header http.Header) bool {
+//
+// It is what decides whether the headers that protect a document are reported
+// at their own level or at none, and is exported so that a consumer can say
+// which way a run went: a header block pasted without its Content-Type reads as
+// a response with no document to protect.
+func ResponseHasBody(header http.Header) bool {
 	if header.Get("Content-Length") == "0" {
 		return false
 	}
@@ -93,7 +98,7 @@ func AnalyzeHeaders(header http.Header) (*sarif.Run, error) {
 		return nil, nil
 	}
 
-	hasBody := responseHasBody(header)
+	hasBody := ResponseHasBody(header)
 
 	// Iterate header names in deterministic order so results ordering is stable.
 	headerNames := []string{

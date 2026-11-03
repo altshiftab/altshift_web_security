@@ -326,8 +326,8 @@ func TestResponseHasBody(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := responseHasBody(tc.header); got != tc.want {
-				t.Fatalf("responseHasBody(%v) = %v, want %v", tc.header, got, tc.want)
+			if got := ResponseHasBody(tc.header); got != tc.want {
+				t.Fatalf("ResponseHasBody(%v) = %v, want %v", tc.header, got, tc.want)
 			}
 		})
 	}

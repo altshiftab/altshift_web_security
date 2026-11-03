@@ -8,6 +8,7 @@ import (
 	"os"
 
 	headerAnalysis "github.com/altshiftab/altshift_web_security/pkg/http/header_analysis/analysis"
+	headerBlock "github.com/altshiftab/altshift_web_security/pkg/http/header_analysis/header_block"
 	"github.com/altshiftab/utils_go/pkg/cli/argument_parser"
 	"github.com/altshiftab/utils_go/pkg/cli/argument_parser/option"
 	"github.com/altshiftab/utils_go/pkg/sarif"
@@ -139,9 +140,9 @@ func runHeaders(ctx context.Context, settings *headersSettings, in io.Reader, ou
 			return fmt.Errorf("io read all: %w", err)
 		}
 
-		header, err = parseHeaderBlock(data)
+		header, err = headerBlock.Parse(string(data))
 		if err != nil {
-			return fmt.Errorf("parse header block: %w", err)
+			return fmt.Errorf("header block parse: %w", err)
 		}
 	} else {
 		requestHeader, err := parseRequestHeaders(settings.requestHeaders)

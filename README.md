@@ -23,6 +23,7 @@ negotiates is asked about too -- so where a new check belongs is never a judgmen
 | `pkg/http/header_analysis/analysis/cross_origin_opener_policy` | Missing, `unsafe-none`, and values browsers do not take |
 | `pkg/http/header_analysis/analysis/cross_origin_embedder_policy` | The same, for what a document may embed |
 | `pkg/http/header_analysis/analysis/cross_origin_resource_policy` | The same, for who may load a resource |
+| `pkg/http/header_analysis/header_block` | The headers of a response captured elsewhere, as pasted or piped |
 | `pkg/http/header_analysis/rule_id` | The id of every rule that can be raised |
 | `pkg/http/header_analysis/rule_id_mappings` | What each rule is called, what it means, and how much it is worth |
 | `pkg/tls/wire` | A ClientHello as bytes, and a server's answer read back out of them |
@@ -79,6 +80,10 @@ of it, so what `curl -D -` or a proxy log holds can be pasted whole:
 ```
 curl -sD - -o /dev/null https://example.com | altshift_web_security headers
 ```
+
+A capture of several responses, as `curl -L` leaves through a redirect, is read for the last of them,
+which is the one finally served. `header_block.Parse` is the same reading, for a caller with a paste
+of its own.
 
 `--json` writes the SARIF log instead of a report: the rule table, and the header name and value
 behind every finding. `--min-level` applies to both, and prunes the rule table along with the

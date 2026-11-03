@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
-	"net/textproto"
 	"strings"
 	"time"
 
@@ -60,41 +58,6 @@ func parseRequestHeaders(values []string) (http.Header, error) {
 	}
 
 	return header, nil
-}
-
-// parseHeaderBlock reads the header fields of a response that was captured elsewhere.
-//
-// What arrives is whatever a person pasted or piped: a whole response beginning with its status
-// line, or the fields alone; ending in a blank line or in nothing at all; with either line ending.
-// All of it is accepted, because rejecting a paste over its last newline would serve nothing.
-func parseHeaderBlock(data []byte) (http.Header, error) {
-	text := strings.ReplaceAll(string(data), "\r\n", "\n")
-	text = strings.TrimLeft(text, "\n")
-
-	// A response pasted whole starts with its status line, which is not a field and would be read
-	// as a malformed one.
-	if strings.HasPrefix(text, "HTTP/") {
-		_, rest, _ := strings.Cut(text, "\n")
-		text = rest
-	}
-
-	text = strings.TrimRight(text, "\n")
-	if strings.TrimSpace(text) == "" {
-		return nil, altshiftErrors.NewWithTrace(empty_error.New("header block"))
-	}
-
-	// The reader stops at a blank line, and treats reaching the end without one as the block being
-	// cut short; supplying the terminator is what accepts a block that simply ended.
-	text += "\n\n"
-
-	mimeHeader, err := textproto.NewReader(bufio.NewReader(strings.NewReader(text))).ReadMIMEHeader()
-	if err != nil {
-		return nil, altshiftErrors.NewWithTrace(
-			fmt.Errorf("%w: read mime header: %w", altshiftErrors.ErrParseError, err),
-		)
-	}
-
-	return http.Header(mimeHeader), nil
 }
 
 // fetch asks the site for a response and returns the headers it came back with.

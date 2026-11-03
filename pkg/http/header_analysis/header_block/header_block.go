@@ -26,7 +26,9 @@ import (
 // such as ":status", which some tools list among the others, are not fields and are skipped.
 //
 // A block holding no fields is a validation error and a block that is not header fields a parse
-// error. Neither carries the text, which may hold cookies and credentials.
+// error. A parse error quotes the one line it stopped at, which is what a person needs to find it,
+// and which may itself be a cookie or a credential: an error from here is shown to whoever pasted
+// the block, not logged. The rest of the text is carried nowhere.
 func Parse(text string) (http.Header, error) {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 

@@ -1,0 +1,8 @@
+# The NEEDS_EVAL array of allowlist_bypasses/jsonp.ts in https://github.com/google/csp-evaluator at ad530f3ae5473f9e03c8bf500ee0ada8d9e9b822, with the TypeScript around it removed.
+# Copyright 2016 Google Inc. Licensed under the Apache License, Version 2.0; see NOTICE and LICENSE-csp-evaluator.
+googletagmanager.com
+www.googletagmanager.com
+www.googleadservices.com
+google-analytics.com
+ssl.google-analytics.com
+www.google-analytics.com

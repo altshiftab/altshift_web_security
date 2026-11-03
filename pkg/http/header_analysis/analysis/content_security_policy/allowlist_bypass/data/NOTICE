@@ -1,0 +1,26 @@
+The lists in this directory are taken from two other projects, under their licenses. refresh.sh is this repository's own; it fetches the lists again and rewrites the commit lines below.
+
+CSP Evaluator
+https://github.com/google/csp-evaluator
+CSP Evaluator commit: ad530f3ae5473f9e03c8bf500ee0ada8d9e9b822
+
+Copyright 2016 Google Inc. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use these files except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0, and a copy is in LICENSE-csp-evaluator. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+- csp_evaluator_jsonp.txt is the URLS array of allowlist_bypasses/jsonp.ts: JSONP endpoints on commonly allowlisted hosts.
+- csp_evaluator_jsonp_needs_eval.txt is the NEEDS_EVAL array of the same file: the hosts whose endpoints only work where 'unsafe-eval' is allowed.
+- csp_evaluator_angular.txt is the URLS array of allowlist_bypasses/angular.ts: hosts serving AngularJS, a script gadget.
+
+These files are modified: the entries are as upstream has them, one to a line, with the TypeScript around them removed and a header added saying so.
+
+csp-toolkit
+https://github.com/sampsonc/csp_toolkit
+csp-toolkit commit: 3618bea146a08c373e074898adfceb9b25b27ece
+
+Copyright (c) 2026 Carl Sampson
+
+Licensed under the MIT License, reproduced in LICENSE-csp-toolkit.
+
+- csp_toolkit_cdn_gadgets.json is src/csp_toolkit/data/cdn_gadgets.json, unchanged: CDN hosts serving libraries that act as script gadgets, and hosts that serve anything anyone publishes.
+- csp_toolkit_arbitrary_hosting.txt is the _ARBITRARY_HOSTING_DOMAINS set of src/csp_toolkit/bypass.py, one entry to a line: hosts where anyone can publish content.

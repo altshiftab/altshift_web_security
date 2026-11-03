@@ -1,0 +1,20 @@
+# The _ARBITRARY_HOSTING_DOMAINS set of src/csp_toolkit/bypass.py in https://github.com/sampsonc/csp_toolkit at 3618bea146a08c373e074898adfceb9b25b27ece, with the Python around it removed.
+# Copyright (c) 2026 Carl Sampson. Licensed under the MIT License; see NOTICE and LICENSE-csp-toolkit.
+raw.githubusercontent.com
+cdn.rawgit.com
+rawgit.com
+gist.githubusercontent.com
+pastebin.com
+paste.ee
+ideone.com
+jsbin.com
+codepen.io
+jsfiddle.net
+plnkr.co
+surge.sh
+netlify.app
+vercel.app
+pages.dev
+workers.dev
+web.app
+firebaseapp.com

@@ -4,13 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 
 	httpHeadersSecurityCheckerInternal "github.com/altshiftab/altshift_web_security/pkg/http/header_analysis/analysis/internal"
 	"github.com/altshiftab/altshift_web_security/pkg/http/header_analysis/rule_id"
 	altshiftErrors "github.com/altshiftab/utils_go/pkg/errors"
 	contentSecurityPolicyTypes "github.com/altshiftab/utils_go/pkg/http/types/content_security_policy"
-	"github.com/altshiftab/utils_go/pkg/net/types/domain_parts"
 	"github.com/altshiftab/utils_go/pkg/sarif"
 )
 
@@ -39,10 +39,9 @@ var cdnFullDomainsSet = map[string]bool{
 }
 
 var cdnRegisteredDomainsSet = map[string]bool{
-	"googleapis.com": true,
-	"gstatic.com":    true,
-	"unpkg.com":      true,
-	"jsdelivr.net":   true,
+	"gstatic.com":  true,
+	"unpkg.com":    true,
+	"jsdelivr.net": true,
 }
 
 // Properties naming what in the policy a result is about, so that a consumer can show the
@@ -122,7 +121,12 @@ func makeWildcardResult(directiveName string, source contentSecurityPolicyTypes.
 	return result
 }
 
-func checkSources(directiveName string, sources []contentSecurityPolicyTypes.SourceI) (bool, []*sarif.Result, error) {
+// checkSources judges a directive's sources; evalAllowed is whether the policy lets script run strings as code.
+func checkSources(
+	directiveName string,
+	sources []contentSecurityPolicyTypes.SourceI,
+	evalAllowed bool,
+) (bool, []*sarif.Result, error) {
 	if len(sources) == 0 {
 		return false, nil, nil
 	}
@@ -196,47 +200,12 @@ func checkSources(directiveName string, sources []contentSecurityPolicyTypes.Sou
 				results = append(results, result)
 			}
 
-			if host := typedSource.Host; host != "" {
-				// TODO: This branch is currently unreachable: domain_parts.New calls
-				// publicsuffix.EffectiveTLDPlusOne, which errors on any host containing
-				// "*", so dp is nil for inputs like "*.com" or "*.co.uk". Switch to a
-				// wildcard-aware variant (domain_parts_config with AllowWildcards) so
-				// the check can actually fire.
-				if dp := domain_parts.New(host); dp != nil {
-					if dp.RegisteredDomain == "*" {
-						result := httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyWildcardRegisteredDomainHost)
-						result.Message = &sarif.Message{
-							Text: fmt.Sprintf(
-								"The %s source of the %s directive effectively uses a wildcard host source. Using a wildcard in place of the registered domain of a host is unsafe as it permits content to be loaded from any external host with a specific effective top-level domain.",
-								source.String(),
-								directiveName,
-							),
-						}
-						result.Level = getDirectiveNameUntrustedSourceLevel(directiveName)
-						results = append(results, result)
-					} else {
-						switch directiveName {
-						case directiveDefaultSrc, "script-src", "script-src-attr", "script-src-elem", "worker-src":
-							var cdnDomain string
-							if _, ok := cdnFullDomainsSet[host]; ok {
-								cdnDomain = host
-							} else if _, ok := cdnRegisteredDomainsSet[dp.RegisteredDomain]; ok {
-								cdnDomain = dp.RegisteredDomain
-							}
-							if cdnDomain != "" {
-								result := httpHeadersSecurityCheckerInternal.MakeRuleIdResult(rule_id.ContentSecurityPolicyCdnScriptSource)
-								result.Message = &sarif.Message{
-									Text: fmt.Sprintf(
-										"The %s directive, which controls code execution, uses a content-delivery network (CDN) host source with the domain %s. Permitting code to be loaded and executed from CDNs effectively renders a directive ineffective as CDNs are hosting user-provided content, which an attacker could arrange to be malicious to achieve cross-site scripting (XSS) etc.",
-										directiveName,
-										cdnDomain,
-									),
-								}
-								results = append(results, result)
-							}
-						}
-					}
-				}
+			result, err := hostResult(directiveName, typedSource, evalAllowed)
+			if err != nil {
+				return false, nil, err
+			}
+			if result != nil {
+				results = append(results, result)
 			}
 		case *contentSecurityPolicyTypes.KeywordSource:
 			keyword := strings.ToLower(typedSource.Keyword)
@@ -325,6 +294,29 @@ func checkSources(directiveName string, sources []contentSecurityPolicyTypes.Sou
 	return strict, results, nil
 }
 
+// policyAllowsEval reports whether a policy lets script run strings as code, which script-src decides, falling back
+// to default-src, and which a policy with neither leaves allowed.
+func policyAllowsEval(directives []contentSecurityPolicyTypes.DirectiveI) bool {
+	var defaultSrc *contentSecurityPolicyTypes.DefaultSrcDirective
+	for _, directive := range directives {
+		switch typedDirective := directive.(type) {
+		case *contentSecurityPolicyTypes.ScriptSrcDirective:
+			return hasUnsafeEval(typedDirective.Sources)
+		case *contentSecurityPolicyTypes.DefaultSrcDirective:
+			defaultSrc = typedDirective
+		}
+	}
+
+	return defaultSrc == nil || hasUnsafeEval(defaultSrc.Sources)
+}
+
+func hasUnsafeEval(sources []contentSecurityPolicyTypes.SourceI) bool {
+	return slices.ContainsFunc(sources, func(source contentSecurityPolicyTypes.SourceI) bool {
+		keywordSource, ok := source.(*contentSecurityPolicyTypes.KeywordSource)
+		return ok && strings.EqualFold(keywordSource.Keyword, "unsafe-eval")
+	})
+}
+
 func Analyze(headerValue string) ([]*sarif.Result, error) {
 	if headerValue == "" {
 		return nil, nil
@@ -343,6 +335,9 @@ func Analyze(headerValue string) ([]*sarif.Result, error) {
 	}
 
 	var allResults []*sarif.Result
+
+	// Some JSONP endpoints only work where 'unsafe-eval' lets them.
+	evalAllowed := policyAllowsEval(contentSecurityPolicy.Directives)
 
 	var defaultSrcDefined bool
 	var strictDefaultSource bool
@@ -371,49 +366,49 @@ func Analyze(headerValue string) ([]*sarif.Result, error) {
 
 		switch typedDirective := directive.(type) {
 		case *contentSecurityPolicyTypes.ChildSrcDirective:
-			strict, results, err = checkSources(directiveName, typedDirective.Sources)
+			strict, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 			childSrcDefined = true
 			strictChildSrc = strict
 		case *contentSecurityPolicyTypes.ConnectSrcDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.FontSrcDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.FrameSrcDirective:
-			strict, results, err = checkSources(directiveName, typedDirective.Sources)
+			strict, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 			frameSrcDefined = true
 			strictFrameSrc = strict
 		case *contentSecurityPolicyTypes.ImgSrcDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.ManifestSrcDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.MediaSrcDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.ObjectSrcDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.ScriptSrcAttrDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.ScriptSrcDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.ScriptSrcElemDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.StyleSrcAttrDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.StyleSrcDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.StyleSrcElemDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.WorkerSrcDirective:
-			_, results, err = checkSources(directiveName, typedDirective.Sources)
+			_, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 		case *contentSecurityPolicyTypes.DefaultSrcDirective:
-			strict, results, err = checkSources(directiveName, typedDirective.Sources)
+			strict, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 			defaultSrcDefined = true
 			strictDefaultSource = strict
 		case *contentSecurityPolicyTypes.BaseUriDirective:
-			strict, results, err = checkSources(directiveName, typedDirective.Sources)
+			strict, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 			baseUriDefined = true
 			strictBaseUri = strict
 		case *contentSecurityPolicyTypes.FormActionDirective:
-			strict, results, err = checkSources(directiveName, typedDirective.Sources)
+			strict, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 			formActionDefined = true
 			strictFormAction = strict
 		case *contentSecurityPolicyTypes.SandboxDirective:
@@ -422,7 +417,7 @@ func Analyze(headerValue string) ([]*sarif.Result, error) {
 		case *contentSecurityPolicyTypes.ReportToDirective:
 		case *contentSecurityPolicyTypes.RequireSriForDirective:
 		case *contentSecurityPolicyTypes.FrameAncestorsDirective:
-			strict, results, err = checkSources(directiveName, typedDirective.Sources)
+			strict, results, err = checkSources(directiveName, typedDirective.Sources, evalAllowed)
 			frameAncestorsDefined = true
 			strictFrameAncestors = strict
 		}

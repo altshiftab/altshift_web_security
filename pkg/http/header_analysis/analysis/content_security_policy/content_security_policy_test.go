@@ -202,7 +202,8 @@ func TestAnalyze_PerSource(t *testing.T) {
 }
 
 // Verifies the (12) refactor: wildcard registered domain and CDN script source
-// are emitted from inside checkSources rather than a second pass.
+// are emitted from inside checkSources rather than a second pass. The CDN rule is
+// what a CDN host earns when no more specific rule explains it.
 func TestAnalyze_HostBasedFindings(t *testing.T) {
 	t.Parallel()
 
@@ -212,15 +213,15 @@ func TestAnalyze_HostBasedFindings(t *testing.T) {
 		wantIDs []string
 	}{
 		{
-			name:  "CDN host in script-src",
-			input: "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; " + strictBoilerplate,
+			name:  "CDN host in script-src, restricted to a library that is no gadget",
+			input: "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js; " + strictBoilerplate,
 			wantIDs: []string{
 				rule_id.ContentSecurityPolicyCdnScriptSource,
 			},
 		},
 		{
 			name:  "CDN registered domain in script-src",
-			input: "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; " + strictBoilerplate,
+			input: "default-src 'self'; script-src 'self' https://ssl.gstatic.com; " + strictBoilerplate,
 			wantIDs: []string{
 				rule_id.ContentSecurityPolicyCdnScriptSource,
 			},
@@ -535,6 +536,14 @@ func TestAnalyze_NamesTheDirectiveAndSource(t *testing.T) {
 			directive:      "img-src",
 			directiveValue: "*",
 			source:         "*",
+		},
+		{
+			name:           "a source allowing a JSONP endpoint",
+			input:          "default-src 'self'; script-src 'self' https://accounts.google.com; " + strictBoilerplate,
+			ruleId:         rule_id.ContentSecurityPolicyJsonpScriptSource,
+			directive:      "script-src",
+			directiveValue: "'self' https://accounts.google.com",
+			source:         "https://accounts.google.com",
 		},
 		{
 			name:      "a missing directive",

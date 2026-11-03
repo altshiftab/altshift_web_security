@@ -15,7 +15,8 @@ negotiates is asked about too -- so where a new check belongs is never a judgmen
 | Package | What it answers |
 | --- | --- |
 | `pkg/http/header_analysis/analysis` | What is wrong with the security headers this response serves? |
-| `pkg/http/header_analysis/analysis/content_security_policy` | Unsafe keywords, wildcard and loopback sources, CDN script sources, the directives a policy leaves out |
+| `pkg/http/header_analysis/analysis/content_security_policy` | Unsafe keywords, wildcard and loopback sources, script sources an attacker can use, the directives a policy leaves out |
+| `pkg/http/header_analysis/analysis/content_security_policy/allowlist_bypass` | The JSONP endpoints, script gadgets and user-content hosts that defeat a script allowlist |
 | `pkg/http/header_analysis/analysis/strict_transport_security` | A missing or short max-age, no includeSubDomains, no preload |
 | `pkg/http/header_analysis/analysis/x_frame_options` | Obsolete, and values that frame anyway |
 | `pkg/http/header_analysis/analysis/x_content_type_options` | Anything that is not `nosniff` |
@@ -50,6 +51,43 @@ Two behaviours are worth knowing before reading a run:
 - The headers that protect a document -- CSP, COOP, COEP, Permissions-Policy -- are reported at
   level `none` when the response carries no document to protect, which a bare redirect, a 204 and a
   304 do not.
+
+### Script sources
+
+A host a policy takes script from is judged by what an attacker could make it serve, and earns at
+most one of four rules, the most direct first:
+
+| Rule | Severity | Raised for |
+| --- | --- | --- |
+| `content_security_policy_user_content_script_source` | high; medium for one publisher's part | A host anyone can publish on: a wildcard over a suffix in the Public Suffix List's private section (`*.github.io`, `*.cloudfront.net`), the arbitrary-hosting hosts csp-toolkit lists (`raw.githubusercontent.com`, `pastebin.com`), npm's CDNs (`cdn.jsdelivr.net`, `unpkg.com`) and the path-style endpoints of cloud storage (`s3.amazonaws.com`, `storage.googleapis.com`). A source confined to one site, path or package on such a host (`example.netlify.app`, `cdn.jsdelivr.net/npm/bootstrap@5.3.0/`) is medium: it is as trustworthy as whoever holds that part. |
+| `content_security_policy_jsonp_script_source` | high | A JSONP endpoint on CSP Evaluator's list. The endpoints that run their payload through `eval` count only where the policy allows `'unsafe-eval'`, which `script-src` decides, falling back to `default-src`. |
+| `content_security_policy_script_gadget_source` | high | A copy of a library that turns injected markup into code -- AngularJS, Dojo, Knockout or Vue -- on CSP Evaluator's or csp-toolkit's list. |
+| `content_security_policy_cdn_script_source` | high | What the earlier CDN list has left to say: a host of `cdnjs.cloudflare.com`, `gstatic.com`, `jsdelivr.net` or `unpkg.com` that no other rule explains. |
+
+A source with a path reaches only what CSP lets it reach, as CSP Evaluator matches its lists: a path
+ending in `/` allows what is beneath it and any other path only itself, so
+`https://www.google.com/recaptcha/` does not allow the JSONP endpoint at
+`/tools/feedback/escalation-options`. A port other than the scheme's default reaches none of the
+listed hosts. A platform's own host (`github.io`) is no publisher's, and the hosts under
+`googleapis.com` are Google's services rather than its users' sites, though the list has it as a
+private suffix.
+
+The rules are raised in the directives that decide where script comes from -- `default-src`,
+`script-src`, `script-src-elem`, `script-src-attr` and `worker-src` -- and nowhere else. A wildcard
+spanning registered domains, as `*.com` and `*.co.uk` do, is
+`content_security_policy_wildcard_registered_domain_host` in any directive, except that one over a
+private suffix in those directives is the user-content rule instead.
+
+The lists are vendored in `content_security_policy/allowlist_bypass/data`: the JSONP and AngularJS
+lists from Google's [CSP Evaluator](https://github.com/google/csp-evaluator) (Apache-2.0), and the
+gadget and arbitrary-hosting lists from [csp-toolkit](https://github.com/sampsonc/csp_toolkit) (MIT).
+Its `NOTICE` names the commit each came from, and `refresh.sh` fetches them again.
+[CSPBypass](https://github.com/renniepak/CSPBypass) is GPL-3.0 and is not vendored; what the rules
+make of it is measured against a copy of its `data.tsv` kept elsewhere:
+
+```
+CSPBYPASS_DATA=path/to/data.tsv go test ./pkg/http/header_analysis/analysis/content_security_policy -run CspBypassCoverage -v
+```
 
 ## Command
 

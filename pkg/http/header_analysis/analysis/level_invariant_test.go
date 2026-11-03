@@ -55,6 +55,10 @@ func TestAnalyzeHeadersEmitsOnlyValidLevels(t *testing.T) {
 			header: http.Header{"Content-Security-Policy": []string{"default-src example.test; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"}},
 		},
 		{
+			name:   "a user-content host",
+			header: http.Header{"Content-Security-Policy": []string{"script-src https://example.github.io https://*.netlify.app; default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"}},
+		},
+		{
 			name:   "unsafe-eval",
 			header: http.Header{"Content-Security-Policy": []string{"script-src 'unsafe-eval'; default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"}},
 		},

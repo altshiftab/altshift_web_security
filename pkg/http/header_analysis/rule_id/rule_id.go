@@ -54,6 +54,9 @@ const (
 	ContentSecurityPolicyInsecureFrameAncestors         = "content_security_policy_insecure_frame_ancestors"
 	ContentSecurityPolicyIneffectiveDirective           = "content_security_policy_ineffective_directive"
 	ContentSecurityPolicyCdnScriptSource                = "content_security_policy_cdn_script_source"
+	ContentSecurityPolicyUserContentScriptSource        = "content_security_policy_user_content_script_source"
+	ContentSecurityPolicyJsonpScriptSource              = "content_security_policy_jsonp_script_source"
+	ContentSecurityPolicyScriptGadgetSource             = "content_security_policy_script_gadget_source"
 	ContentSecurityPolicyMissingRequireSriForScript     = "content_security_policy_missing_require_sri_for_script"
 	ContentSecurityPolicyMissingRequireSriForStyle      = "content_security_policy_missing_require_sri_for_style"
 

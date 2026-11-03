@@ -89,6 +89,9 @@ var RuleIdToSeverity = map[string]Severity{
 	rule_id.ContentSecurityPolicyInsecureFrameAncestors:     SeverityMedium,
 	rule_id.ContentSecurityPolicyIneffectiveDirective:       SeverityInfo,
 	rule_id.ContentSecurityPolicyCdnScriptSource:            SeverityHigh,
+	rule_id.ContentSecurityPolicyUserContentScriptSource:    SeverityDynamic,
+	rule_id.ContentSecurityPolicyJsonpScriptSource:          SeverityHigh,
+	rule_id.ContentSecurityPolicyScriptGadgetSource:         SeverityHigh,
 	rule_id.ContentSecurityPolicyMissingRequireSriForScript: SeverityInfo,
 	rule_id.ContentSecurityPolicyMissingRequireSriForStyle:  SeverityInfo,
 
@@ -149,6 +152,9 @@ var RuleIdToTitle = map[string]string{
 	rule_id.ContentSecurityPolicyInsecureFrameAncestors:     "The frame-ancestors directive of the Content-Security-Policy header is not set to a safe value",
 	rule_id.ContentSecurityPolicyIneffectiveDirective:       dynamicSentinel,
 	rule_id.ContentSecurityPolicyCdnScriptSource:            dynamicSentinel,
+	rule_id.ContentSecurityPolicyUserContentScriptSource:    dynamicSentinel,
+	rule_id.ContentSecurityPolicyJsonpScriptSource:          dynamicSentinel,
+	rule_id.ContentSecurityPolicyScriptGadgetSource:         dynamicSentinel,
 	rule_id.ContentSecurityPolicyMissingRequireSriForScript: "The Content-Security-Policy header is missing the require-sri-for directive with the script resource type set.",
 	rule_id.ContentSecurityPolicyMissingRequireSriForStyle:  "The Content-Security-Policy header is missing the require-sri-for directive with the style resource type set.",
 
@@ -211,6 +217,9 @@ var RuleIdToDescription = map[string]string{
 	rule_id.ContentSecurityPolicyInsecureFrameAncestors:     ContentSecurityPolicyFrameAncestorsDescription,
 	rule_id.ContentSecurityPolicyIneffectiveDirective:       dynamicSentinel,
 	rule_id.ContentSecurityPolicyCdnScriptSource:            dynamicSentinel,
+	rule_id.ContentSecurityPolicyUserContentScriptSource:    dynamicSentinel,
+	rule_id.ContentSecurityPolicyJsonpScriptSource:          dynamicSentinel,
+	rule_id.ContentSecurityPolicyScriptGadgetSource:         dynamicSentinel,
 	rule_id.ContentSecurityPolicyMissingRequireSriForScript: "The Content-Security-Policy header should include a require-sri-for directive with a script resource type, which asserts that all loaded script resources need to be integrity checked. Note: this directive is not yet widely supported, hence a severity of \"info\".",
 	rule_id.ContentSecurityPolicyMissingRequireSriForStyle:  "The Content-Security-Policy header should include a require-sri-for directive with a style resource type, which asserts that all loaded style resources need to be integrity checked. Note: this directive is not yet widely supported, hence a severity of \"info\".",
 
